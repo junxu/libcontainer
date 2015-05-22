@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	"github.com/docker/libcontainer/configs"
 )
@@ -35,6 +37,7 @@ func (v *ConfigValidator) Validate(config *configs.Config) error {
 	if err := v.usernamespace(config); err != nil {
 		return err
 	}
+	v.addProcMount(config)
 	return nil
 }
 
@@ -90,4 +93,26 @@ func (v *ConfigValidator) usernamespace(config *configs.Config) error {
 		}
 	}
 	return nil
+}
+
+func (v *ConfigValidator) addProcMount(config *configs.Config) {
+	if !(config.Namespaces.Contains(configs.NEWNS)) {
+		return
+	}
+
+	hasProc := false
+	for _, m := range config.Mounts {
+		if (strings.Trim(m.Source, " ") == "proc") && (strings.Trim(strings.Trim(m.Destination, " "), "/") == "proc") {
+			hasProc = true
+			break
+		}
+	}
+	if !hasProc {
+		config.Mounts = append(config.Mounts, &configs.Mount{
+			Source:      "proc",
+			Destination: "/proc",
+			Device:      "proc",
+			Flags:       syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV,
+		})
+	}
 }
